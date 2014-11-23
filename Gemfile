@@ -5,6 +5,7 @@ source 'https://rubygems.org'
 gem 'rails', '4.1.7'
 # Use sqlite3 as the database for Active Record
 gem 'sqlite3'
+gem 'mysql2'
 # Use SCSS for stylesheets
 gem 'sass-rails', '~> 4.0.3'
 # Use Uglifier as compressor for JavaScript assets
@@ -34,7 +35,7 @@ gem 'sdoc', '~> 0.4.0',          group: :doc
 # gem 'debugger', group: [:development, :test]
 
 
-gem "zwr"
+
 gem "bootstrap-sass", "~> 3.2.0"
 gem "bootstrap_form"
 gem "puma", platforms: :ruby
@@ -50,3 +51,6 @@ gem "factory_girl_rails", "~> 4.0"
 gem "tzinfo-data", platforms: [:mingw, :mswin, :x64_mingw]
 gem "tzinfo", platforms: [:mingw, :mswin, :x64_mingw]
 gem "devise", "~> 3.3.0"
+
+gem "zwr"
+gem "nokogiri"
