@@ -1,0 +1,22 @@
+= form_for @scan do |f|
+  - if @scan.errors.any?
+    #error_explanation
+      %h2= "#{pluralize(@scan.errors.count, "error")} prohibited this scan from being saved:"
+      %ul
+        - @scan.errors.full_messages.each do |msg|
+          %li= msg
+
+  .field
+    = f.label :url
+    = f.text_field :url
+  .field
+    = f.label :type
+    = f.text_field :type
+  .field
+    = f.label :content
+    = f.text_field :content
+  .field
+    = f.label :last_visited
+    = f.datetime_select :last_visited
+  .actions
+    = f.submit 'Save'
