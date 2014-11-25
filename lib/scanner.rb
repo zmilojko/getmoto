@@ -26,7 +26,10 @@ class ShopScanner
     if url[0..2] == "fi/"
       url = url[3..-1]
     end
-    "http://#{@host}/fi/#{url}/"
+    if url[-1] == "/"
+      url = url[0..-2]
+    end
+    "http://#{@host}/fi/#{url}"
   end
   
   def self.ver
@@ -60,7 +63,7 @@ class ShopScanner
     page = get_page full_url url
     
     s0.content = page.force_encoding("UTF-8")
-    s0.save!
+    #s0.save!
     
     #File.open "xxxx.txt", "w:UTF-8" do 
     #  |f| f.write page.force_encoding("UTF-8") 
@@ -74,6 +77,7 @@ class ShopScanner
     
     now_start = false
     count = 0
+
     ActiveRecord::Base.transaction do
       elem_list.children.each do |elem|
         case elem.name
@@ -97,6 +101,7 @@ class ShopScanner
     
     s0.last_visited = DateTime.now
     s0.save!
+    puts "  => done."
   end
   
   def handle_next
