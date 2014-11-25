@@ -11,7 +11,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20141123112921) do
+ActiveRecord::Schema.define(version: 20141123210655) do
 
   create_table "scans", force: true do |t|
     t.string   "url"
@@ -22,6 +22,7 @@ ActiveRecord::Schema.define(version: 20141123112921) do
     t.datetime "updated_at"
   end
 
+  add_index "scans", ["last_visited"], name: "index_scans_on_last_visited", using: :btree
   add_index "scans", ["url"], name: "index_scans_on_url", unique: true, using: :btree
 
   create_table "users", force: true do |t|
