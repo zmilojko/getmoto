@@ -13,25 +13,30 @@ def process_page(url, maker: nil, model: nil, details: [], file: nil)
           name = name_node.text.strip
           sopivus = tr.children[5].text.strip
           price = tr.children[7].text.strip
+          begin
+            price = price.gsub(",",".").match(/\d*\.?\d+/)[0]
+          rescue
+            price = 0
+          end
           #this is product info
           raise "no category" if cat.nil?
           raise "no maker" if maker.nil?
           raise "no model" if model.nil?
           my_file.write <<-OBJECT
   {
-    shop: "motonet"
-    pid: "#{pid}",
-    name: "#{name}",
-    price: #{price.gsub(",",".")},
-    image_id: "#{pid}",
-    compatibility: [
-      {brand: "#{maker}", models: ["#{model}"]},
+    "shop": "motonet",
+    "pid": "#{pid}",
+    "name": "#{name.gsub("\\","\\\\").gsub("\"","\\\"")}",
+    "price": #{price},
+    "image_id": "#{pid}",
+    "compatibility": [
+      {"brand": "#{maker.gsub("\\","\\\\").gsub("\"","\\\"")}", "models": ["#{model.gsub("\\","\\\\").gsub("\"","\\\"")}"]}
     ],
-    categories: [
-      [#{cat.split(":").map{|x| %("#{x.strip}")}.join(",")}]
+    "categories": [
+      [#{cat.split(":").map{|x| %("#{x.strip.gsub("\\","\\\\").gsub("\"","\\\"")}")}.join(",")}]
     ],
-    details: [
-      [#{details.map{|x| %("#{x.strip}")}.join(",")}]
+    "details": [
+      [#{details.map{|x| %("#{x.strip.gsub("\\","\\\\").gsub("\"","\\\"")}")}.join(",")}]
     ]
   },
   OBJECT
