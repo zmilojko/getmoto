@@ -4,7 +4,7 @@ namespace :scanner do
     # Following is needed to load the Scan model, if it is available.
     Scan
     require 'scanner'
-    scanner = ShopScanner.new "teksti.motonet.fi"
+    scanner = ShopScanner.new "mustapekka.fi"
     scanner.keep_handling
     puts "Believe it or not, we are done!"
   end

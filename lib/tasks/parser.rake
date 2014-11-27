@@ -1,99 +1,118 @@
-def process_page(url, maker: nil, model: nil, details: [], file: nil)
-  my_file = file
+def process_page(url, cat: [], file: nil, exc_file: exc_file, this_is_page: false)
+  puts "#{" "*2*cat.length}processing #{url}"
+  
   page = Scan.find_by url: url
-  html_doc = Nokogiri::HTML(page.content)
-  if !(elem_list = html_doc.search('div[class="varaosalista"]')).empty?
-    if !elem_list.search('th:contains("Tuote")').empty?
-      #Analyze product
-      tbody = elem_list.search 'table'
-      cat = selite = nil
-      tbody.children.each do |tr|
-        if !(name_node = tr.search('td[class="varaosatuote"]')).empty?
-          pid = tr.search('a').text.gsub(/[-€]/,"").strip
-          name = name_node.text.strip
-          sopivus = tr.children[5].text.strip
-          price = tr.children[7].text.strip
-          begin
-            price = price.gsub(",",".").match(/\d*\.?\d+/)[0]
-          rescue
-            price = 0
-          end
-          #this is product info
-          raise "no category" if cat.nil?
-          raise "no maker" if maker.nil?
-          raise "no model" if model.nil?
-          my_file.write <<-OBJECT
-  {
-    "shop": "motonet",
-    "pid": "#{pid}",
-    "name": "#{name.gsub("\\","\\\\").gsub("\"","\\\"")}",
-    "price": #{price},
-    "image_id": "#{pid}",
-    "compatibility": [
-      {"brand": "#{maker.gsub("\\","\\\\").gsub("\"","\\\"")}", "models": ["#{model.gsub("\\","\\\\").gsub("\"","\\\"")}"]}
-    ],
-    "categories": [
-      [#{cat.split(":").map{|x| %("#{x.strip.gsub("\\","\\\\").gsub("\"","\\\"")}")}.join(",")}]
-    ],
-    "details": [
-      [#{details.map{|x| %("#{x.strip.gsub("\\","\\\\").gsub("\"","\\\"")}")}.join(",")}]
-    ]
-  },
-  OBJECT
-        elsif !(name_node = tr.search('td[class="tuoteotsikko"]')).empty?
-          cat = tr.children[0].text.strip
-          selite = nil
-        elsif !(name_node = tr.search('td[class="selite"]')).empty?
-          selite = tr.children[0].text.strip
-        end
-      end
-    else
-      #Analyze category
-      now_start = false
-      count = 0
-      elem_list.children.each do |elem|
-        case elem.name
-        when "a"
-          link = elem.attributes["href"].value
-          if link != url
-            maker2 = maker
-            model2 = model
-            # This is a subcategory link
-            last = link.match(/\/([^\/]+)\/?$/)[1]
-            if maker2.nil?
-              if file.nil? and not my_file.nil?
-                my_file.write "]\n"
-                my_file.close
-                my_file = nil
-              end
-              maker2 = last
-              my_file = File.open(Rails.root.join("results/#{maker2}"),'wb:UTF-8')
-              my_file.write "[\n"
-            elsif model2.nil?
-              model2 = last.gsub(/-(19|20)\d{2}\-((19|20)\d{2})?/,"")
-              model2 = model2.gsub(/-\d{2}\-(\d{2})?/,"")
-            end
-            process_page link, 
-                        maker: maker2, 
-                        model: model2, 
-                        details: Array.new(details) << last,
-                        file: my_file
-          end
-        when "h1"
-          now_start = true
-        when "h2"
-          now_start = true
-        end
-      end
+  doc = Nokogiri::HTML(page.content)
+  
+  if doc.search('title')[0].text == "301 Moved Permanently"
+    puts "#{" "*2*cat.length}  PAGE MOVED PERMANENTLY"
+    exc_file.write <<-EXCEPTION
+    {
+      "url": "#{url}",
+      "exception": "301 Moved Permanently",
+      "details": ["#{doc.search('a')[0].attributes["href"].value}"]
+    },
+    EXCEPTION
+    exc_file.flush
+    return
+  end
+  
+  cat1 = Array.new(cat)
+  cat1 << url.match(/\/([^\/]+)-\d+$/)[1] unless this_is_page
+  # Does this page have subcategories:
+  elem_list = doc.search('span[class="category"]')
+  unless elem_list.empty?
+    elem_list.each do |span|
+      process_page span.children[0].attributes['href'].value, cat: cat1, file: file, exc_file: exc_file
     end
   else
-    raise "WRONG PAGE FOUND! #{url}"
+    #this page contains a list of product, but there might be other 'pages' in the bottom
+    #process products first
+    puts "#{" "*2*cat.length}  processing products from: #{url}"
+    process_product_page doc, url, cat1, file, exc_file
+
+    # now scan pages 2-N, if you are on page 1
+    page_list = doc.search('div[id="paging-num"]')
+    unless page_list.empty? or page_list[0].children[0].nil? or page_list[0].children[0].attributes['class'].nil?
+      if page_list[0].children[0].attributes['class'].value == 'current'
+        # Take the last child, use it as a pattern
+        last_url = page_list[0].children.last.search('a')[0].attributes["href"].value
+        # should look like "/verkkokauppa/client/index/page:7?id=556"
+        max_page = last_url.match(/page:(\d+)\?id/)[1].to_i
+        (2..max_page).each do |page_num|
+          new_page_url = last_url.gsub(/page:\d+\?id/,"page:#{page_num}?id")
+          puts "#{" "*2*cat.length}  processing product subpage: #{new_page_url}"
+          process_page new_page_url, cat: cat1, file: file, exc_file: exc_file, this_is_page: true
+        end
+      end
+    end  
   end
 end
 
+def process_product_page(doc, url, cat, file, exc_file)
+  prod_table = doc.search('table[class="products-listing"]')[0]
+  prod_table.children.each_with_index do |tr, index|
+    h4_list = tr.search('h4')
+    unless h4_list.blank?
+      h4 = h4_list[0]
+      name = h4.search('a').text
+      product_url = h4.search('a')[0].attributes["href"].value
+      puts "#{" "*2*cat.length}    writing product: #{product_url}"
+      begin
+        pid = product_url.match(/\-(\d+\-\d+)\/?$/)[1]
+      rescue
+        puts "#{" "*2*cat.length}  PAGE MOVED PERMANENTLY"
+        exc_file.write <<-EXCEPTION
+        {
+          "url": "#{url}",
+          "exception": "PRODUCT URL NOT FORMED WELL",
+          "details": [
+            "#{url}",
+            "#{product_url}",
+          ]
+        },
+        EXCEPTION
+        exc_file.flush
+        next
+      end
+      begin
+        price = tr.children[9].text.strip
+        price = price.gsub(",",".").match(/\d*\.?\d+/)[0]
+      rescue
+        price = 0
+      end
+      image_id = tr.children[1].search('img')[0].attributes["src"].value.gsub("50x50","120x120")
+      file.write <<-OBJECT
+      {
+        "shop": "mustapekka",
+        "url": "#{product_url}",
+        "pid": "#{pid.downcase}",
+        "name": "#{name.gsub("\\","\\\\").gsub("\"","\\\"").downcase}",
+        "price": #{price},
+        "image_id": "#{image_id}",
+        "compatibility": [],
+        "categories": [[#{cat.map{|x| %("#{x.strip.downcase.gsub("\\","\\\\").gsub("\"","\\\"")}")}.join(",")}]],
+        "details": []
+      },
+      OBJECT
+    end
+  end
+end
+  
 namespace :parser do
-  desc "outputs the log, use as rake parser:parse > filename"
+  desc "outputs the log to results/res, use as rake parser:parse"
   task :parse => :environment do
-    process_page Scan.first.url
+    first_page = Scan.first
+    doc = Nokogiri::HTML(first_page.content)
+    elem_list = doc.search('//li[contains(@class, "nav-icon")]')
+    File.open(Rails.root.join("results/results"),'wb:UTF-8') do |file|
+      File.open(Rails.root.join("results/exceptions"),'wb:UTF-8') do |exc_file|
+        file.write "[\n"
+        elem_list.each do |li|
+          process_page li.children[1].attributes['href'].value, file: file, exc_file: exc_file
+        end
+        file.write "]"
+      end
+    end  
   end
 end
